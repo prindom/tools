@@ -20,7 +20,6 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
      * @var string
      */
     protected $signature = 'exceltocsv 
-                            {--config= : Path to a saved configuration file}
                             {--sheet= : Specific sheet name to convert (default: first sheet)}
                             {--encoding=UTF-8 : Output file encoding}
                             {--skip-rows=0 : Number of rows to skip from the beginning}
@@ -33,13 +32,6 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
      */
     protected $description = 'Convert Excel files to CSV with options for columns and value mapping';
 
-    /**
-     * Configuration storage
-     * 
-     * @var array
-     */
-    protected array $config = [];
-
     protected function promptForMissingArgumentsUsing(): array
     {
         return [
@@ -51,72 +43,6 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
      * Execute the console command.
      */
     public function handle(): void
-    {
-        // Check if config file was provided
-        $configFilePath = $this->option('config');
-
-        if ($configFilePath && File::exists($configFilePath)) {
-            $this->info("Loading configuration from: {$configFilePath}");
-            if ($this->loadConfigFromJson($configFilePath)) {
-                $this->processWithSavedConfig();
-                return;
-            }
-            $this->warn("Invalid configuration file. Proceeding with interactive mode.");
-        }
-
-        // Interactive mode
-        $this->processInteractively();
-    }
-
-    /**
-     * Process conversion using saved configuration
-     */
-    private function processWithSavedConfig(): void
-    {
-        try {
-            $this->info('Processing with saved configuration...');
-
-            // Load configuration values
-            $inputFile = $this->config['input_file'];
-            $outputFile = $this->config['output_file'];
-            $delimiter = $this->config['delimiter'];
-            $selectedSheet = $this->config['sheet'] ?? null;
-            $skipRows = (int) ($this->config['skip_rows'] ?? 0);
-            $includeHeaders = $this->config['include_headers'] ?? true;
-            $encoding = $this->config['encoding'] ?? 'UTF-8';
-
-            if (!File::exists($inputFile)) {
-                $this->error("Input file not found: {$inputFile}");
-                return;
-            }
-
-            $spreadsheet = $this->loadSpreadsheet($inputFile, $selectedSheet);
-
-            // Apply column removals if specified
-            if (!empty($this->config['columns_to_remove'])) {
-                $this->applyColumnRemovals($spreadsheet, $this->config['columns_to_remove']);
-            }
-
-            // Apply value mappings if specified
-            if (!empty($this->config['value_mappings'])) {
-                $this->applyValueMappings($spreadsheet, $this->config['value_mappings']);
-            }
-
-            $this->exportToCsv($spreadsheet, $outputFile, $delimiter, $encoding, $skipRows, $includeHeaders);
-        } catch (SpreadsheetReaderException $e) {
-            $this->error("Error loading Excel file: " . $e->getMessage());
-        } catch (\Exception $e) {
-            $this->error("Error: " . $e->getMessage());
-            if ($this->option('verbose')) {
-                $this->error($e->getTraceAsString());
-            }
-        }
-    }
-
-    /**
-     * Process conversion interactively
-     */
-    private function processInteractively(): void
     {
         // Read all xlsx in the current working directory
         $files = glob('*.xlsx');
@@ -151,41 +77,19 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
         $includeHeaders = !$this->option('no-headers');
         $encoding = $this->option('encoding');
 
-        // Store basic configuration
-        $this->config = [
-            'input_file' => $inputFile,
-            'output_file' => $outputFile,
-            'delimiter' => $delimiter,
-            'sheet' => $selectedSheet,
-            'skip_rows' => $skipRows,
-            'include_headers' => $includeHeaders,
-            'encoding' => $encoding,
-            'columns_to_remove' => [],
-            'value_mappings' => [],
-        ];
-
         try {
             $this->info('Loading Excel file...');
             $spreadsheet = $this->loadSpreadsheet($inputFile, $selectedSheet);
 
-            $columnsToRemove = [];
             if ($this->confirm('Do you want to modify columns before exporting?', false)) {
-                [$spreadsheet, $columnsToRemove] = $this->handleColumnChanges($spreadsheet);
-                $this->config['columns_to_remove'] = $columnsToRemove;
+                $spreadsheet = $this->handleColumnChanges($spreadsheet);
             }
 
-            $valueMappings = [];
             if ($this->confirm('Do you want to map values for any columns?', false)) {
-                [$spreadsheet, $valueMappings] = $this->handleMapping($spreadsheet);
-                $this->config['value_mappings'] = $valueMappings;
+                $spreadsheet = $this->handleMapping($spreadsheet);
             }
 
             $this->exportToCsv($spreadsheet, $outputFile, $delimiter, $encoding, $skipRows, $includeHeaders);
-
-            // Ask if the user wants to save this configuration
-            if ($this->confirm('Would you like to save this configuration for future use?', true)) {
-                $this->saveConfigToJson();
-            }
         } catch (SpreadsheetReaderException $e) {
             $this->error("Error loading Excel file: " . $e->getMessage());
             return;
@@ -198,115 +102,72 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
     }
 
     /**
-     * Save current configuration to a JSON file
+     * Load a spreadsheet from file
      */
-    private function saveConfigToJson(): void
+    private function loadSpreadsheet(string $inputFile, ?string $sheetName = null): Spreadsheet
     {
-        $configName = $this->ask('Enter a name for this configuration', 'excel_config_' . date('YmdHis'));
-        $configName = str_ends_with($configName, '.json') ? $configName : $configName . '.json';
+        $reader = IOFactory::createReaderForFile($inputFile);
+        $reader->setReadDataOnly(true);
 
-        try {
-            $jsonContent = json_encode($this->config, JSON_PRETTY_PRINT);
-            File::put($configName, $jsonContent);
-            $this->info("Configuration saved to: {$configName}");
-            $this->line("You can use it with: ./data-formatter-cli exceltocsv --config={$configName}");
-        } catch (\Exception $e) {
-            $this->error("Failed to save configuration: " . $e->getMessage());
+        if ($sheetName) {
+            $reader->setLoadSheetsOnly([$sheetName]);
         }
+
+        return $reader->load($inputFile);
     }
 
     /**
-     * Load configuration from a JSON file
+     * Export spreadsheet to CSV
      */
-    private function loadConfigFromJson(string $path): bool
-    {
-        try {
-            $content = File::get($path);
-            $config = json_decode($content, true);
+    private function exportToCsv(
+        Spreadsheet $spreadsheet,
+        string $outputFile,
+        string $delimiter,
+        string $encoding,
+        int $skipRows = 0,
+        bool $includeHeaders = true
+    ): void {
+        $writer = new Csv($spreadsheet);
+        $writer->setDelimiter($delimiter);
+        $writer->setEnclosure('"');
+        $writer->setLineEnding("\r\n");
+        $writer->setSheetIndex(0);
 
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                return false;
-            }
-
-            // Validate required fields
-            if (!isset($config['input_file'], $config['output_file'], $config['delimiter'])) {
-                return false;
-            }
-
-            $this->config = $config;
-            return true;
-        } catch (\Exception $e) {
-            return false;
-        }
-    }
-
-    /**
-     * Apply saved column removals to a spreadsheet
-     */
-    private function applyColumnRemovals(Spreadsheet $spreadsheet, array $columnsToRemove): void
-    {
-        if (empty($columnsToRemove)) {
-            return;
+        if ($encoding !== 'UTF-8') {
+            $writer->setUseBOM(true);
         }
 
-        $this->info('Applying column removals...');
-
-        // Sort in descending order to avoid index shifting issues
-        rsort($columnsToRemove);
-
-        foreach ($columnsToRemove as $index) {
-            $spreadsheet->getActiveSheet()->removeColumnByIndex($index + 1);
-        }
-    }
-
-    /**
-     * Apply saved value mappings to a spreadsheet
-     */
-    private function applyValueMappings(Spreadsheet $spreadsheet, array $valueMappings): void
-    {
-        if (empty($valueMappings)) {
-            return;
-        }
-
-        $this->info('Applying value mappings...');
-
-        foreach ($valueMappings as $mapping) {
-            $columnIndex = $mapping['column_index'];
-            $mappings = $mapping['mappings'];
-
-            $colName = Coordinate::stringFromColumnIndex($columnIndex + 1);
-
-            foreach ($spreadsheet->getActiveSheet()->toArray() as $rowIndex => $row) {
-                if ($rowIndex === 0) {
-                    continue;
-                }
-
-                $cellAddress = $colName . ($rowIndex + 1);
-                $cell = $spreadsheet->getActiveSheet()->getCell($cellAddress);
-                $cellValue = $cell->getValue();
-
-                // Handle boolean values
-                if ($cell->getDataType() === 'b') {
-                    $cellValue = $cellValue ? 'TRUE' : 'FALSE';
-                }
-
-                if (array_key_exists($cellValue, $mappings)) {
-                    $spreadsheet->getActiveSheet()->setCellValue($cellAddress, $mappings[$cellValue]);
-                }
+        // Check if file exists, if so, ask user to overwrite or not
+        if (File::exists(getcwd() . '/' . $outputFile)) {
+            $overwrite = $this->confirm('File already exists, do you want to overwrite it?', true);
+            if (!$overwrite) {
+                $outputFile = $this->ask('Please provide the name for the new file');
+                $outputFile = str_ends_with($outputFile, '.csv') ? $outputFile : $outputFile . '.csv';
             }
         }
+
+        // Adjust skip rows if needed
+        if ($skipRows > 0) {
+            // Implementation would need custom CSV writer or post-processing
+            $this->info("Skipping first {$skipRows} rows...");
+        }
+
+        // Write the file
+        $writer->save($outputFile);
+        $this->info("File converted successfully to {$outputFile}");
     }
 
     /**
-     * Handle column mapping and return the mappings for potential storage
+     * Handle column mapping
      */
-    private function handleMapping(Spreadsheet $spreadsheet): array
+    private function handleMapping(Spreadsheet $spreadsheet): Spreadsheet
     {
         $headers = $spreadsheet->getActiveSheet()->toArray()[0];
         $this->info('Starting column value mapping...');
 
-        $valueMappings = [];
-
+        // ask if any column values should be mapped to new values by 1. asking for the column name
+        // 2. showing an array of unique values in that column
+        // 3. asking for the new value for each unique value
         foreach ($headers as $col => $header) {
             $map = $this->confirm("Do you want to map values for column {$header}?");
             if ($map) {
@@ -333,13 +194,6 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
                 if (!$apply) {
                     continue;
                 }
-
-                // Store this mapping configuration
-                $valueMappings[] = [
-                    'column_index' => $col,
-                    'column_name' => $header,
-                    'mappings' => $newValues
-                ];
 
                 $colName = Coordinate::stringFromColumnIndex($col + 1);
 
@@ -368,13 +222,13 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
             }
         }
 
-        return [$spreadsheet, $valueMappings];
+        return $spreadsheet;
     }
 
     /**
-     * Handle column modifications and return the columns to remove for potential storage
+     * Handle column modifications
      */
-    private function handleColumnChanges(Spreadsheet $spreadsheet): array
+    private function handleColumnChanges(Spreadsheet $spreadsheet): Spreadsheet
     {
         $headers = $spreadsheet->getActiveSheet()->toArray()[0];
         $this->info('Starting column modifications...');
@@ -400,7 +254,7 @@ class ExcelToCSV extends Command implements PromptsForMissingInput
             $spreadsheet->getActiveSheet()->removeColumnByIndex($index + 1);
         }
 
-        return [$spreadsheet, $toRemove];
+        return $spreadsheet;
     }
 
     // Helper methods for converting between column index and column name
