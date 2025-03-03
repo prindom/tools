@@ -1,34 +1,86 @@
-<p align="center">
-    <img title="Laravel Zero" height="100" src="https://raw.githubusercontent.com/laravel-zero/docs/master/images/logo/laravel-zero-readme.png" alt="Laravel Zero Logo" />
-</p>
+# Data Formatter CLI
 
 <p align="center">
-  <a href="https://github.com/laravel-zero/framework/actions"><img src="https://github.com/laravel-zero/laravel-zero/actions/workflows/tests.yml/badge.svg" alt="Build Status" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/dt/laravel-zero/framework.svg" alt="Total Downloads" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/v/laravel-zero/framework.svg?label=stable" alt="Latest Stable Version" /></a>
-  <a href="https://packagist.org/packages/laravel-zero/framework"><img src="https://img.shields.io/packagist/l/laravel-zero/framework.svg" alt="License" /></a>
+    <img title="Data Formatter CLI" height="100" src="https://raw.githubusercontent.com/laravel-zero/docs/master/images/logo/laravel-zero-readme.png" alt="Laravel Zero Logo" />
 </p>
 
-Laravel Zero was created by [Nuno Maduro](https://github.com/nunomaduro) and [Owen Voke](https://github.com/owenvoke), and is a micro-framework that provides an elegant starting point for your console application. It is an **unofficial** and customized version of Laravel optimized for building command-line applications.
+A powerful command-line tool for converting and manipulating Excel files to CSV format with extensive customization options. Built with Laravel Zero.
 
-- Built on top of the [Laravel](https://laravel.com) components.
-- Optional installation of Laravel [Eloquent](https://laravel-zero.com/docs/database/), Laravel [Logging](https://laravel-zero.com/docs/logging/) and many others.
-- Supports interactive [menus](https://laravel-zero.com/docs/build-interactive-menus/) and [desktop notifications](https://laravel-zero.com/docs/send-desktop-notifications/) on Linux, Windows & MacOS.
-- Ships with a [Scheduler](https://laravel-zero.com/docs/task-scheduling/) and  a [Standalone Compiler](https://laravel-zero.com/docs/build-a-standalone-application/).
-- Integration with [Collision](https://github.com/nunomaduro/collision) - Beautiful error reporting
+## Features
 
-------
+- **Excel to CSV Conversion**: Easily convert Excel (.xlsx) files to CSV format
+- **Interactive Mode**: Guides you through the conversion process with interactive prompts
+- **Value Mapping**: Map column values to new values during conversion
+- **Column Management**: Selectively remove columns you don't need
+- **Format Customization**: Configure delimiters, encoding, and more
+- **Flexible Output**: Control headers, skip rows, and other output options
 
-## Documentation
+## Installation
 
-For full documentation, visit [laravel-zero.com](https://laravel-zero.com/).
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/data-formatter-cli.git
 
-## Support the development
-**Do you like this project? Support it by donating**
+# Navigate to the project directory
+cd data-formatter-cli
 
-- PayPal: [Donate](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=66BYDWAT92N6L)
-- Patreon: [Donate](https://www.patreon.com/nunomaduro)
+# Install dependencies
+composer install
+
+# Make the command executable
+chmod +x data-formatter-cli
+```
+
+## Usage
+
+### Basic Usage
+
+```bash
+./data-formatter-cli exceltocsv
+```
+
+The command will guide you through the process interactively, prompting for:
+- Input Excel file
+- Output CSV location
+- Delimiter character
+- Column modifications
+- Value mapping options
+
+### Available Options
+
+```bash
+./data-formatter-cli exceltocsv [options]
+```
+
+Options:
+- `--sheet=SHEET_NAME`: Specific sheet name to convert (default: first sheet)
+- `--encoding=ENCODING`: Output file encoding (default: UTF-8)
+- `--skip-rows=N`: Number of rows to skip from the beginning
+- `--no-headers`: Don't include headers in output
+
+### Example Workflow
+
+1. Run the command
+2. Select your Excel file
+3. Choose your output CSV name
+4. Configure your CSV delimiter
+5. Optionally remove columns you don't need
+6. Optionally map values for specific columns
+
+The tool will handle the conversion and save the output file with your specified settings.
+
+## Building a Standalone Application
+
+You can build a standalone PHAR file using:
+
+```bash
+php data-formatter-cli app:build
+```
+
+## Credits
+
+Data Formatter CLI is built on top of [Laravel Zero](https://laravel-zero.com), an elegant starting point for your Laravel console application by [Nuno Maduro](https://github.com/nunomaduro).
 
 ## License
 
-Laravel Zero is an open-source software licensed under the MIT license.
+This project is open-sourced software licensed under the MIT license.
